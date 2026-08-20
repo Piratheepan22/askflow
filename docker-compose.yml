@@ -1,0 +1,32 @@
+# askflow/docker-compose.yml
+services:
+    db:
+        image: pgvector/pgvector:pg16
+        environment:
+            POSTGRES_USER: askflow
+            POSTGRES_PASSWORD: askflow
+            POSTGRES_DB: askflow
+        volumes:
+            - pgdata:/var/lib/postgresql/data   # data survives restarts
+        ports:
+            - "5442:5432"
+    backend:
+        build: ./backend
+        environment:
+            DATABASE_URL: postgresql://askflow:askflow@db:5432/askflow
+            # OPENAI_API_KEY: ${OPENAI_API_KEY}   # read from your .env
+            GROQ_API_KEY: ${GROQ_API_KEY}
+            TAVILY_API_KEY: ${TAVILY_API_KEY}
+
+        depends_on:
+            - db
+        ports:
+            - "8000:8000"
+    frontend:
+        build: ./frontend
+        ports:
+            - "5173:80"
+        depends_on:
+            - backend
+volumes:
+    pgdata:

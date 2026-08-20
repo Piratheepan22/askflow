@@ -1,0 +1,30 @@
+ Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+ 
+# Secrets
+.env
+.env.*
+!.env.example
+ 
+# Node
+node_modules/
+dist/
+ 
+# Docker / data
+*.log
+pgdata/
+ 
+# ML model cache (sentence-transformers downloads)
+.cache/
+*.pt
+*.bin
+ 
+# Editor / OS
+.DS_Store
+.vscode/
+*.swp
+ 
