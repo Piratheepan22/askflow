@@ -29,7 +29,7 @@ app = FastAPI(title="AskFlow API")
 # Let the React dev server (port 5173) call this API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "https://askflow-1.onrender.com"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
