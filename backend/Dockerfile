@@ -11,4 +11,5 @@ RUN pip install --no-cache-dir \
 # Copy the application code.
 COPY ./app ./app
 # Start the API server, listening on all interfaces.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

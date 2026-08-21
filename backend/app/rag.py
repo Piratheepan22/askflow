@@ -49,12 +49,13 @@
 #     finally:
 #         db.close()
 
+from fastembed import TextEmbedding
 
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from app.database import SessionLocal
 from app.models import Document, Chunk
 
-embeddings_model = SentenceTransformer("all-MiniLM-L6-v2")
+embeddings_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> list[str]:
     chunks = []
@@ -74,19 +75,19 @@ def ingest_document(filename: str, text: str) -> int:
         db.refresh(doc)
 
         pieces = chunk_text(text)
-        vectors = embeddings_model.encode(pieces).tolist()
+        vectors = list(embeddings_model.embed(pieces))
 
         for piece, vector in zip(pieces, vectors):
-            db.add(Chunk(document_id=doc.id, content=piece, embedding=vector))
+            db.add(Chunk(document_id=doc.id, content=piece, embedding=vector.tolist()))
         db.commit()
         return doc.id
     finally:
         db.close()
 
-def search_chunks(query: str, top_k: int = 4) -> list[str]:
+def search_chunks(query: str, top_k: int = 3) -> list[str]:
     db = SessionLocal()
     try:
-        query_vector = embeddings_model.encode(query).tolist()
+        query_vector = list(embeddings_model.embed([query]))[0].tolist()
         results = (
             db.query(Chunk)
             .order_by(Chunk.embedding.cosine_distance(query_vector))
