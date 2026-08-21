@@ -3,7 +3,6 @@
 AskFlow tool-calling agent.
 
 Architecture
-------------
 Search is handled in two layers:
 
 1. PLANNING (outside the agent loop): a single, structured-output LLM call
@@ -45,9 +44,7 @@ logger = logging.getLogger(__name__)
 
 tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
 
-# --------------------------------------------------------------------------
 # Execution limits
-# --------------------------------------------------------------------------
 MAX_ITERATIONS = 8           # tool-call/response cycles per turn
 MAX_EXECUTION_TIME = 45      # seconds per turn
 MAX_WEB_SEARCH_CALLS = 2     # fallback budget for the agent's own web_search tool
@@ -56,10 +53,8 @@ AGENT_RETRIES = 3
 AGENT_RETRY_BACKOFF_SECONDS = 1.5
 
 
-# --------------------------------------------------------------------------
 # Shared retrieval helper (used by both the planner pre-fetch and the
 # agent-facing web_search tool, so there's one code path for Tavily calls)
-# --------------------------------------------------------------------------
 
 async def _run_web_queries(queries: list[str]) -> str:
     async def run_one(query: str) -> str:
@@ -82,9 +77,7 @@ async def _run_web_queries(queries: list[str]) -> str:
     return "\n\n---\n\n".join(outcomes)
 
 
-# --------------------------------------------------------------------------
 # Search planning — runs once, outside the agent loop
-# --------------------------------------------------------------------------
 
 _SEARCH_PLANNER_SYSTEM_PROMPT = """You are a query planning module for a search agent.
 
@@ -129,9 +122,7 @@ async def plan_search(message: str) -> list[str]:
         return []
 
 
-# --------------------------------------------------------------------------
 # Stateless tools
-# --------------------------------------------------------------------------
 
 @tool
 def get_current_time() -> str:
@@ -214,10 +205,8 @@ def search_documents(query: str) -> str:
         return f"Error searching documents: {e}"
 
 
-# --------------------------------------------------------------------------
 # Stateful tool: web_search (fallback path — primary path is plan_search
 # + _run_web_queries, called directly from run_agent before the agent starts)
-# --------------------------------------------------------------------------
 
 def build_web_search_tool():
     """Factory returning a web_search tool with a per-run call budget.
@@ -270,10 +259,7 @@ def build_tools() -> list:
         search_documents,
     ]
 
-
-# --------------------------------------------------------------------------
 # Prompt
-# --------------------------------------------------------------------------
 
 def build_prompt() -> ChatPromptTemplate:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -302,9 +288,7 @@ def build_prompt() -> ChatPromptTemplate:
     ])
 
 
-# --------------------------------------------------------------------------
 # LLM
-# --------------------------------------------------------------------------
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
@@ -314,9 +298,7 @@ llm = ChatGroq(
 )
 
 
-# --------------------------------------------------------------------------
 # Agent executor
-# --------------------------------------------------------------------------
 
 def build_agent_executor() -> AgentExecutor:
     # Build tools ONCE and pass the same list to both the agent and the
@@ -332,6 +314,7 @@ def build_agent_executor() -> AgentExecutor:
         handle_parsing_errors=True,
         early_stopping_method="generate",
     )
+
 
 
 async def run_agent(message: str, history: list) -> str:
@@ -376,8 +359,69 @@ async def run_agent(message: str, history: list) -> str:
                 continue
             break
 
-    logger.error("Agent failed after retries: %s", last_error)
-    return (
-        "Sorry, I ran into a problem processing that request. "
-        f"({type(last_error).__name__}: {last_error})"
-    )
+    # Full detail goes to server-side logs only — never into a user-facing string.
+    logger.error("Agent failed after retries: %s: %s", type(last_error).__name__, last_error)
+
+    error_text = str(last_error).lower()
+    if "rate_limit" in error_text or "429" in error_text:
+        return ("I'm getting a lot of requests right now and hit a temporary limit. "
+                "Please try again in a few minutes.")
+    if "timeout" in error_text or "timed out" in error_text:
+        return "That took longer than expected. Please try again."
+
+    return "Sorry, I'm having trouble processing requests right now. Please try again shortly."
+
+
+
+
+
+
+
+
+# async def run_agent(message: str, history: list) -> str:
+#     """Run one agent turn.
+
+#     Search is planned and executed in parallel BEFORE the agent starts
+#     (see module docstring). Results are folded into the agent's input so
+#     the tool-calling loop typically doesn't need to search at all.
+#     """
+#     search_queries = await plan_search(message)
+#     augmented_input = message
+
+#     if search_queries:
+#         logger.info("Search plan for this turn: %s", search_queries)
+#         search_context = await _run_web_queries(search_queries)
+#         augmented_input = (
+#             f"{message}\n\n"
+#             "[Web search results gathered for this question — use them if "
+#             "relevant; only call web_search yourself if something is still "
+#             "missing]\n"
+#             f"{search_context}"
+#         )
+
+#     last_error: Exception | None = None
+#     for attempt in range(AGENT_RETRIES):
+#         try:
+#             executor = build_agent_executor()
+#             result = await executor.ainvoke({
+#                 "input": augmented_input,
+#                 "chat_history": history,
+#             })
+#             return result["output"]
+#         except Exception as e:
+#             last_error = e
+#             is_transient = "JSON" in str(e) or "parse" in str(e).lower()
+#             if is_transient and attempt < AGENT_RETRIES - 1:
+#                 logger.warning(
+#                     "Transient tool-call parsing error (attempt %d/%d): %s",
+#                     attempt + 1, AGENT_RETRIES, e,
+#                 )
+#                 await asyncio.sleep(AGENT_RETRY_BACKOFF_SECONDS * (attempt + 1))
+#                 continue
+#             break
+
+#     logger.error("Agent failed after retries: %s", last_error)
+#     return (
+#         "Sorry, I ran into a problem processing that request. "
+#         f"({type(last_error).__name__}: {last_error})"
+#     )
