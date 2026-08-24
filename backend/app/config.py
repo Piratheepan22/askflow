@@ -1,4 +1,4 @@
-# backend/app/config.py
+
 from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # These defaults match docker-compose; .env overrides them.
