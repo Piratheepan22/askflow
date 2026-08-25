@@ -59,3 +59,44 @@ export async function uploadDocument(file) {
   if (!res.ok) throw new Error("Upload failed");
   return res.json();
 }
+
+export async function getConversations() {
+  const token = localStorage.getItem("askflow-token");
+  const res = await fetch(`${BASE}/conversations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Could not load conversations");
+  return res.json();
+}
+
+export async function getConversationMessages(conversationId) {
+  const token = localStorage.getItem("askflow-token");
+  const res = await fetch(`${BASE}/conversations/${conversationId}/messages`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Could not load messages");
+  return res.json();
+}
+
+export async function renameConversation(conversationId, title) {
+  const token = localStorage.getItem("askflow-token");
+  const res = await fetch(`${BASE}/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error("Rename failed");
+  return res.json();
+}
+
+export async function deleteConversation(conversationId) {
+  const token = localStorage.getItem("askflow-token");
+  const res = await fetch(`${BASE}/conversations/${conversationId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Delete failed");
+}

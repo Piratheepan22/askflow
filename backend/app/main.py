@@ -52,17 +52,54 @@ def get_current_user(
 def health():
     return {"status": "ok"}
 @app.get("/conversations", response_model=list[schemas.ConversationOut])
-def list_conversations(db: Session = Depends(get_db)):
+def list_conversations(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    ):
     return (db.query(models.Conversation)
-              .order_by(models.Conversation.created_at.desc())
-              .all())
+       .filter(models.Conversation.user_id == current_user.id)
+       .order_by(models.Conversation.created_at.desc())
+       .all())
+
 @app.get("/conversations/{cid}/messages",
          response_model=list[schemas.MessageOut])
-def get_messages(cid: int, db: Session = Depends(get_db)):
+def get_messages(
+    cid: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    ):
     convo = db.get(models.Conversation, cid)
-    if not convo:
+    if not convo or convo.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return convo.messages
+
+
+@app.patch("/conversations/{cid}", response_model=schemas.ConversationOut)
+def rename_conversation(
+    cid: int,
+    payload: schemas.ConversationRename,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    convo = db.get(models.Conversation, cid)
+    if not convo or convo.user_id != current_user.id:
+        raise HTTPException(404, "Conversation not found")
+    convo.title = payload.title.strip()[:200]
+    db.commit()
+    db.refresh(convo)
+    return convo
+
+@app.delete("/conversations/{cid}", status_code=204)
+def delete_conversation(
+    cid: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    convo = db.get(models.Conversation, cid)
+    if not convo or convo.user_id != current_user.id:
+        raise HTTPException(404, "Conversation not found")
+    db.delete(convo)
+    db.commit()
 
 # @app.post("/chat", response_model=schemas.ChatResponse)
 # def chat(req: schemas.ChatRequest, db: Session = Depends(get_db)):
